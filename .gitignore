@@ -28,6 +28,7 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.local  # Added this line
 /test-results/
 /playwright-report/
 /playwright/.cache/
