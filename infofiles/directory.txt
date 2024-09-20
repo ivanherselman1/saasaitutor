@@ -1,0 +1,60 @@
+NEWAITUTORSAASPROJECT/
+│
+├── next-enterprise/
+│   ├── .github/
+│   ├── .next/
+│   ├── .npm-only-allow
+│   ├── .storybook
+│   ├── .vscode/
+│
+├── app/
+│   ├── api/
+│       └── auth/
+│           ├── [...nextauth].js
+│           ├── route.ts
+│       └── test/
+│           └── route.js
+│
+├── health/
+├── layout.tsx
+├── page.tsx
+│
+├── components/
+├── e2e/
+│
+├── lib/
+│   ├── models/
+│   │   └── User.js
+│   └── mongodb.js
+│
+├── node_modules/
+│
+├── pages/
+│   └── api/
+│       └── auth/
+│           └── signin.js
+│
+├── styles/
+│
+├── .all-contributorsrc
+├── .env.local
+├── .eslintignore
+├── .eslintrc.js
+├── .gitignore
+├── .pre-commit-config.yaml
+├── .prettierrcignore
+├── .releaserc
+├── env.mjs
+├── git-conventional-commits.yaml
+├── graph.svg
+├── instrumentation.ts
+├── jest.config.js
+├── jest.setup.js
+├── LICENSE
+├── lp-items.tsx
+├── next-config.mjs
+├── next-env.d.ts
+├── next.config.mjs
+├── package.json
+├── playwright.config.ts
+└── postcss.config.js

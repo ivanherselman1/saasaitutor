@@ -1,6 +1,8 @@
 import { Metadata } from "next"
 import { Button } from "components/Button/Button"
 import { LP_GRID_ITEMS } from "lp-items"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "./api/auth/[...nextauth]/route"
 
 export const metadata: Metadata = {
   title: "Next.js Enterprise Boilerplate",
@@ -19,7 +21,9 @@ export const metadata: Metadata = {
   },
 }
 
-export default function Web() {
+export default async function Web() {
+  const session = await getServerSession(authOptions)
+
   return (
     <>
       <section className="bg-white dark:bg-gray-900">
@@ -42,6 +46,21 @@ export default function Web() {
             >
               Deploy Now
             </Button>
+            {!session && (
+              <Button href="/auth/signin" className="mt-4">
+                Sign In
+              </Button>
+            )}
+            {session?.user?.name && (
+              <>
+                <p className="mt-4 text-gray-500 dark:text-gray-400">
+                  Welcome, {session.user.name}!
+                </p>
+                <Button href="/api/auth/signout" className="mt-4">
+                  Sign Out
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </section>

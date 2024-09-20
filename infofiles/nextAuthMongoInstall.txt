@@ -1,0 +1,825 @@
+What is Next-Auth?
+Next-Auth is an authentication library designed for Next.js applications specifically. Put simply, Next-Auth makes it easier to add authentication to your Next.js applications. It provides a more seamless integration of authentication functionalities. Next-Auth also provides better compatibility with other authentication methods, like OAuth providers (Google, GitHub, etc.).
+Next-Auth offers a set of user-friendly APIs and other components that can handle very complex authentication flows. This means developers can focus more on building their applications.
+Out of the box, Next-Auth provides excellent authentication security and built-in session handling. It's appropriate for applications of all sizes and works well with serverless and edge computing environments. It also has full TypeScript support, for an improved developer experience.
+Requirements
+Before we dive in, make sure you have the following prerequisites:
+Node.js v20: Make sure you have Node.js installed on your machine. You can download it from the official website.
+React and Next.js 14: A basic understanding of React and Next.js 14 is helpful for this tutorial.
+(Optional) Have 
+MongoDB Community Edition 7.0
+ installed and running.
+Ensure you have the mongodb-community service started locally. Alternatively, you can use a free-forever 
+MongoDB Atlas cluster
+.
+Creating the Next.js project
+Let's create a new Next.js project using the following command in your terminal:
+Code Snippet
+1
+npx create-next-app@latest mongodb-auth
+copyIcon
+Answer the questions as follows:
+Code Snippet
+1
+create-next-app@14.2.3
+2
+Ok to proceed? (y) y
+3
+✔ Would you like to use TypeScript? …  Yes
+4
+✔ Would you like to use ESLint? …  Yes
+5
+✔ Would you like to use Tailwind CSS? …  Yes
+6
+✔ Would you like to use `src/` directory? … No
+7
+✔ Would you like to use App Router? (recommended) …  Yes
+8
+✔ Would you like to customize the default import alias (@/*)? … No
+copyIcon
+After the prompts, create-next-app will create a folder with your project name and install the required dependencies.
+Installing dependencies
+Navigate inside your project and install the following dependencies:
+Code Snippet
+1
+cd mongo-auth
+2
+npm install next-auth bcryptjs mongoose
+3
+npm install –-save-dev @types/bcryptjs
+copyIcon
+The next-auth package provides authentication functionalities for Next.js applications. The next-auth package also offers built-in support for various authentication providers and allows for easy integration with your application.
+The bcryptjs library provides functions for hashing passwords using the bcrypt algorithm. It's commonly used for securely storing passwords in databases by generating salted password hashes.
+Mongoose is an object data modeling (ODM) library for MongoDB and Node.js. It provides a straightforward, schema-based solution to model your application data, making it easier to work with MongoDB databases.
+After installing these dependencies, you'll have the necessary tools and libraries to set up authentication features in your Next.js application, integrate with MongoDB, securely hash passwords, and define data models using Mongoose.
+Connecting to MongoDB
+After installing the dependencies, it's time for connecting to MongoDB. Create a .env.local file in the root of your project and add your MongoDB connection string:
+Code Snippet
+1
+MONGODB_URI=mongodb://127.0.0.1:27017/mydb
+copyIcon
+Note: If you are connecting to a MongoDB Atlas cluster, you can find your 
+connection string
+ in the Atlas dashboard.
+Create a lib/mongodb.ts file and add the following code for connecting to a MongoDB database using mongoose:
+Code Snippet
+1
+import mongoose from "mongoose";
+2
+const { MONGODB_URI } = process.env;
+3
+export const connectDB = async () => {
+4
+  try {
+5
+    const { connection } = await mongoose.connect(MONGODB_URI as string);
+6
+    if (connection.readyState === 1) {
+7
+      return Promise.resolve(true);
+8
+    }
+9
+  } catch (error) {
+10
+    console.error(error);
+11
+    return Promise.reject(error);
+12
+  }
+13
+};
+copyIcon
+We are importing the mongoose library, which is a popular ODM Node.js library for MongoDB. Next, we retrieve the MongoDB URI from the environment variables. Then, we define an asynchronous function named connectDB that connects to the MongoDB database using the URI obtained from the environment variables.
+Inside the connectDB function, we use a try...catch block to handle any potential errors that may occur during the database connection process. Within the try block, we use mongoose.connect() to establish a connection to the MongoDB database using the provided URI. If the connection is successful, we resolve the promise with a value of true.
+If any errors occur during the connection process, they are caught by the catch block. In this case, we log the error to the console and reject the promise with the caught error.
+Next, create a models/User.ts file and start by adding the following imports:
+Code Snippet
+1
+import  mongoose, { Schema, model } from  "mongoose";
+copyIcon
+Add the user interface:
+Code Snippet
+1
+export interface UserDocument {
+2
+  _id: string;
+3
+  email: string;
+4
+  password: string;
+5
+  name: string;
+6
+  phone: string;
+7
+  image: string;
+8
+  createdAt: Date;
+9
+  updatedAt: Date;
+10
+}
+copyIcon
+Add the user schema:
+Code Snippet
+1
+const UserSchema = new Schema<UserDocument>({
+2
+    email: {
+3
+      type: String,
+4
+      unique: true,
+5
+      required: [true, "Email is required"],
+6
+      match: [
+7
+        /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
+8
+        "Email is invalid",
+9
+      ],
+10
+    },
+11
+    password: {
+12
+      type: String,
+13
+      required: true
+14
+    },
+15
+    name: {
+16
+      type: String,
+17
+      required: [true, "Name is required"]
+18
+    }
+19
+  },
+20
+  {
+21
+    timestamps: true,
+22
+  }
+23
+);
+copyIcon
+This defines a Mongoose schema for a user document. The UserSchema specifies the structure and validation rules for user data stored in a MongoDB collection.
+Finally, export the user model:
+Code Snippet
+1
+const  User  =  mongoose.models?.User  ||  model<UserDocument>('User', UserSchema);
+2
+export  default  User;
+copyIcon
+This ensures that the user model is defined and available for use in the application, either by retrieving an existing model or creating a new one based on the specified schema.
+Configuring NextAuth.js
+First, we need a NextAuth secret key. This secret key is used to encrypt JWT tokens and session data. You can get it simply by running this command on your terminal and it will generate a random key for you:
+Code Snippet
+1
+npx auth secret
+copyIcon
+You need to copy the secret to your .env file:
+Code Snippet
+1
+AUTH_SECRET=bVNtF3X1k0QwTD9bx5xUUHOFWAwMXwNdvoF9D8AdgtE=
+copyIcon
+Create a lib/auth.ts file and start by adding the following imports:
+Code Snippet
+1
+import { connectDB } from "@/lib/mongodb";
+2
+import User from "@/models/User";
+3
+import type { NextAuthOptions } from "next-auth";
+4
+import credentials from "next-auth/providers/credentials";
+5
+import bcrypt from "bcryptjs";
+copyIcon
+Define a NextAuth options object as follows:
+Code Snippet
+1
+export const authOptions: NextAuthOptions  = {
+2
+  providers: [
+3
+    credentials({
+4
+      name: "Credentials",
+5
+      id: "credentials",
+6
+      credentials: {
+7
+        email: { label: "Email", type: "text" },
+8
+        password: { label: "Password", type: "password" },
+9
+      },
+10
+      async authorize(credentials) {},
+11
+    }),
+12
+  ],
+13
+  session: {
+14
+    strategy: "jwt",
+15
+  }
+16
+};
+copyIcon
+In the authorize() function, add the following code:
+Code Snippet
+1
+await connectDB();
+2
+const user = await User.findOne({
+3
+  email: credentials?.email,
+4
+}).select("+password");
+5
+​
+6
+if (!user) throw new Error("Wrong Email");
+7
+​
+8
+const passwordMatch = await bcrypt.compare(
+9
+  credentials!.password,
+10
+  user.password
+11
+);
+12
+​
+13
+if (!passwordMatch) throw new Error("Wrong Password");
+14
+return user;
+copyIcon
+This code verifies the user's credentials (email and password) against those stored in a MongoDB database. It ensures that the provided credentials are valid before allowing the user to proceed with authentication.
+Next, create an app/api/auth/[...nextauth]/route.ts file and add the following code:
+Code Snippet
+1
+import { authOptions } from "@/lib/auth";
+2
+import NextAuth from "next-auth";
+3
+const handler = NextAuth(authOptions);
+4
+export { handler as GET, handler as POST };
+copyIcon
+This code imports authentication options from their module, initializes the authentication handler using those options, and exports the handler to be used for both GET and POST requests in API routes.
+Creating a server action for registering users
+In Next.js, a server action refers to any logic or functionality that is executed on the server-side before rendering the page. This can include tasks such as fetching data from an external API, accessing a database, or performing authentication checks.
+In our case, we'll create a server action for registering users. Inside the root of your project, create an actions/register.ts file and start by adding the following imports:
+Code Snippet
+1
+"use server"
+2
+import { connectDB } from "@/lib/mongodb";
+3
+import User from "@/models/User";
+4
+import bcrypt from "bcryptjs";
+copyIcon
+The "use server" directive, placed at the beginning of the file, instructs Next.js to treat the function(s) as a server action. This function can be called from client-side components, but it executes on the server.
+Export a server action as follows:
+Code Snippet
+1
+export const register = async (values: any) => {
+2
+    const { email, password, name } = values;
+3
+​
+4
+    try {
+5
+        await connectDB();
+6
+        const userFound = await User.findOne({ email });
+7
+        if(userFound){
+8
+            return {
+9
+                error: 'Email already exists!'
+10
+            }
+11
+        }
+12
+        const hashedPassword = await bcrypt.hash(password, 10);
+13
+        const user = new User({
+14
+          name,
+15
+          email,
+16
+          password: hashedPassword,
+17
+        });
+18
+        const savedUser = await user.save();
+19
+​
+20
+    }catch(e){
+21
+        console.log(e);
+22
+    }
+23
+}
+copyIcon
+The register function handles the process of registering a new user by connecting to the MongoDB database, checking for existing email addresses, hashing passwords, and saving user data to the database.
+Creating pages
+After setting up NextAuth and implementing a server action for user registration, the next step is to create the login and registration pages.
+Login page
+To begin with, let's focus on the login page. Create a file named app/login/page.tsx and begin by importing the necessary dependencies:
+Code Snippet
+1
+"use client";
+2
+import { FormEvent, useState } from "react";
+3
+import { signIn } from "next-auth/react";
+4
+import { useRouter } from "next/navigation";
+5
+import Link from "next/link";
+copyIcon
+The use client directive is used to mark the component as client-side code. This means that the code within this scope will only be executed and available in the user's browser environment, not on the server.
+Define a function and export it:
+Code Snippet
+1
+export default function Login() {};
+copyIcon
+In the body of the function, start by adding the following code:
+Code Snippet
+1
+const [error, setError] = useState("");
+2
+const router = useRouter();
+copyIcon
+This establishes state management for error messages and access to the client-side router.
+Add the handleSubmit() function as follows:
+Code Snippet
+1
+const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+2
+    event.preventDefault();
+3
+    const formData = new FormData(event.currentTarget);
+4
+    const res = await signIn("credentials", {
+5
+      email: formData.get("email"),
+6
+      password: formData.get("password"),
+7
+      redirect: false,
+8
+    });
+9
+    if (res?.error) {
+10
+      setError(res.error as string);
+11
+    }
+12
+    if (res?.ok) {
+13
+      return router.push("/");
+14
+    }
+15
+};
+copyIcon
+This defines an asynchronous function that handles form submission for user login. It prevents default form behavior, extracts user credentials from the form using FormData, attempts sign-in using NextAuth.js, and handles successful login by redirecting the user to the home page and potential errors by updating the component's error state.
+Return the following JSX code:
+Code Snippet
+1
+return (
+2
+    <section className="w-full h-screen flex items-center justify-center">
+3
+      <form
+4
+        className="p-6 w-full max-w-[400px] flex flex-col justify-between items-center gap-2 
+5
+        border border-solid border-black bg-white rounded"
+6
+        onSubmit={handleSubmit}>
+7
+        {error && <div className="text-black">{error}</div>}
+8
+        <h1 className="mb-5 w-full text-2xl font-bold">Sign In</h1>
+9
+        <label className="w-full text-sm">Email</label>
+10
+        <input
+11
+          type="email"
+12
+          placeholder="Email"
+13
+          className="w-full h-8 border border-solid border-black rounded p-2"
+14
+          name="email" />
+15
+        <label className="w-full text-sm">Password</label>
+16
+        <div className="flex w-full">
+17
+          <input
+18
+            type="password"
+19
+            placeholder="Password"
+20
+            className="w-full h-8 border border-solid border-black rounded p-2"
+21
+            name="password" />
+22
+        </div>
+23
+        <button className="w-full border border-solid border-black rounded">
+24
+          Sign In
+25
+        </button>
+26
+​
+27
+        <Link
+28
+          href="/register"
+29
+          className="text-sm text-[#888] transition duration-150 ease hover:text-black">
+30
+          Don't have an account?
+31
+        </Link>
+32
+      </form>
+33
+    </section>
+34
+);
+copyIcon
+This simply creates a form that allows users to input their email and password for authentication, and it provides a link to navigate to the registration page if they don't have an account yet.
+This is what the form looks like: sign-in form
+Registration page
+Next, let's create the registration page. Create a app/register/page.tsx file and start by adding the following code:
+Code Snippet
+1
+"use client";
+2
+import { FormEvent, useRef, useState } from "react";
+3
+import { useRouter } from "next/navigation";
+4
+import Link from "next/link";
+5
+import { register } from "@/actions/register";
+6
+​
+7
+​
+8
+export default function Register() {
+9
+  const [error, setError] = useState<string>();
+10
+  const router = useRouter();
+11
+  const ref = useRef<HTMLFormElement>(null);
+12
+}
+13
+​
+copyIcon
+This creates a client-side component that initializes state for error handling, utilizes Next.js router for navigation, and provides a reference to the form element, that will be created below, using a ref.
+Add the handleSubmit() function:
+Code Snippet
+1
+const handleSubmit = async (formData: FormData) => {
+2
+    const r = await register({
+3
+        email: formData.get("email"),
+4
+        password: formData.get("password"),
+5
+        name: formData.get("name")    
+6
+      });
+7
+      ref.current?.reset();
+8
+      if(r?.error){
+9
+        setError(r.error);
+10
+        return;
+11
+      } else {
+12
+        return router.push("/login");
+13
+      }
+14
+};
+copyIcon
+This defines an asynchronous function named handleSubmit, which is called when a form is submitted. The function handles the form submission, including extracting form data using FormData, user registration by calling the register server action, error handling, and redirecting the user to the login page upon successful registration. Otherwise, it sets the error that will be displayed.
+Return the following JSX code:
+Code Snippet
+1
+return(
+2
+<section className="w-full h-screen flex items-center justify-center">
+3
+      <form ref = {ref}
+4
+        action={handleSubmit}
+5
+        className="p-6 w-full max-w-[400px] flex flex-col justify-between items-center gap-2 
+6
+        border border-solid border-black bg-white rounded">
+7
+        {error && <div className="">{error}</div>}
+8
+        <h1 className="mb-5 w-full text-2xl font-bold">Register</h1>
+9
+​
+10
+        <label className="w-full text-sm">Full Name</label>
+11
+        <input
+12
+          type="text"
+13
+          placeholder="Full Name"
+14
+          className="w-full h-8 border border-solid border-black py-1 px-2.5 rounded text-[13px]"
+15
+          name="name"
+16
+        />
+17
+​
+18
+        <label className="w-full text-sm">Email</label>
+19
+        <input
+20
+          type="email"
+21
+          placeholder="Email"
+22
+          className="w-full h-8 border border-solid border-black py-1 px-2.5 rounded"
+23
+          name="email"
+24
+        />
+25
+​
+26
+        <label className="w-full text-sm">Password</label>
+27
+        <div className="flex w-full">
+28
+          <input
+29
+            type="password"
+30
+            placeholder="Password"
+31
+            className="w-full h-8 border border-solid border-black py-1 px-2.5 rounded"
+32
+            name="password"
+33
+          />
+34
+        </div>
+35
+​
+36
+        <button className="w-full border border-solid border-black py-1.5 mt-2.5 rounded
+37
+        transition duration-150 ease hover:bg-black">
+38
+          Sign up
+39
+        </button>
+40
+​
+41
+        
+42
+        <Link href="/login" className="text-sm text-[#888] transition duration-150 ease hover:text-black">
+43
+          Already have an account?
+44
+          </Link>
+45
+      </form>
+46
+</section>
+47
+)
+copyIcon
+This is how it looks:
+register form
+Using the session provider and displaying the authentication state
+In this section, we’ll demonstrate how to use the SessionProvider in the parent layout to ensure session management is available throughout the application. We’ll retrieve the authentication state from the session and dynamically display a "Sign Out" button if the user is authenticated, or a "Sign In" button if the user is not authenticated.
+Create a app/provider.tsx file and add the following code:
+Code Snippet
+1
+"use client";
+2
+​
+3
+import { SessionProvider } from "next-auth/react";
+4
+​
+5
+type Props = {
+6
+  children?: React.ReactNode;
+7
+};
+8
+​
+9
+export const Provider = ({ children }: Props) => {
+10
+  return <SessionProvider>{children}</SessionProvider>;
+11
+};
+copyIcon
+Update the app/layout.tsx with the provider we created. First import it:
+Code Snippet
+1
+import { Provider } from  "./provider";
+copyIcon
+Then, add it as follows:
+Code Snippet
+1
+export default function RootLayout({
+2
+  children,
+3
+}: Readonly<{
+4
+  children: React.ReactNode;
+5
+}>) {
+6
+  return (
+7
+    <html lang="en">
+8
+      <Provider>
+9
+        <body className={inter.className}>{children}</body>
+10
+      </Provider>
+11
+    </html>
+12
+  );
+13
+}
+copyIcon
+Update the app/page.tsx file as follows:
+Code Snippet
+1
+"use client";
+2
+import { signOut, useSession } from "next-auth/react";
+3
+import Link from "next/link";
+4
+import { useRouter } from "next/navigation";
+5
+​
+6
+export default function Home() {
+7
+  const { status } = useSession();
+8
+  const router = useRouter();
+9
+​
+10
+  const showSession = () => {
+11
+    if (status === "authenticated") {
+12
+      return (
+13
+        <button
+14
+          className="border border-solid border-black rounded"
+15
+          onClick={() => {
+16
+            signOut({ redirect: false }).then(() => {
+17
+              router.push("/");
+18
+            });
+19
+​
+20
+          }}
+21
+        >
+22
+          Sign Out
+23
+        </button>
+24
+      )
+25
+    } else if (status === "loading") {
+26
+      return (
+27
+        <span className="text-[#888] text-sm mt-7">Loading...</span>
+28
+      )
+29
+    } else {
+30
+      return (
+31
+        <Link
+32
+          href="/login"
+33
+          className="border border-solid border-black rounded"
+34
+        >
+35
+          Sign In
+36
+        </Link>
+37
+      )
+38
+    }
+39
+  }
+40
+  return (
+41
+    <main className="flex min-h-screen flex-col items-center justify-center">
+42
+      <h1 className="text-xl">Home</h1>
+43
+      {showSession()}
+44
+    </main>
+45
+  );
+46
+}
+copyIcon
+Update the app/globals.css file to remove custom CSS and only keeping the following:
+Code Snippet
+1
+@tailwind base;
+2
+@tailwind components;
+3
+@tailwind utilities;
+copyIcon
+Testing
+You first need to register from this interface:
+sign-in interface
+You can then log in from this interface:
+register interfact
+You’ll be redirected to the home page with the “Sign Out” button that appears only when the user is logged in, and you can use it to log out from the app:
+sign-out button
+Conclusion
+In this tutorial, we walked through the steps to set up NextAuth.js authentication with MongoDB as the backend database. We started by creating a new Next.js project and installing necessary dependencies. Then, we established a connection to MongoDB using Mongoose and defined a user schema to structure our user data.
+Next, we configured NextAuth.js by generating a secret key, defining authentication options, and implementing the authorization logic to verify user credentials against MongoDB. We also created server actions for user registration, handling database operations securely on the server-side.
+After configuring authentication, we created login and registration pages using React components and integrated them with NextAuth.js for authentication. We handled form submissions, error handling, and user redirection based on authentication status.
+Finally, we updated the layout to include a session provider for managing user sessions and ensured proper display of authentication status on the home page.
+By following these steps, you can effectively implement authentication in your Next.js application using NextAuth.js and MongoDB, providing a secure and seamless experience for your users while simplifying the authentication setup process for developers.
