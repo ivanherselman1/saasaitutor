@@ -6,6 +6,8 @@ import EmailProvider from "next-auth/providers/email";
 import { MongoDBAdapter } from "@next-auth/mongodb-adapter"; // Import the MongoDB adapter
 import clientPromise from "../../../../lib/mongodb"; // Import your MongoDB client
 
+console.log('NextAuth configuration file is being executed');
+
 export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(clientPromise), // Add the adapter here
   providers: [
@@ -16,6 +18,13 @@ export const authOptions: NextAuthOptions = {
     EmailProvider({
       server: process.env.EMAIL_SERVER,
       from: process.env.EMAIL_FROM,
+      sendVerificationRequest: async ({ identifier, url, provider }) => {
+        console.log('Attempting to send verification email');
+        console.log('Email:', identifier);
+        console.log('URL:', url);
+        console.log('Provider:', JSON.stringify(provider));
+        // The default sendVerificationRequest function will be called here
+      },
     }),
   ],
   pages: {
@@ -24,8 +33,8 @@ export const authOptions: NextAuthOptions = {
   },
   debug: true,
   callbacks: {
-    async signIn({ user, account, profile, email }) {
-      console.log("Sign-in callback:", { user, account, profile, email });
+    async signIn({ user, account, profile, email, credentials }) {
+      console.log("Sign-in callback:", { user, account, profile, email, credentials });
       return true; // Ensure this returns true to proceed with sign-in
     },
     async session({ session, token, user }) {
@@ -34,6 +43,8 @@ export const authOptions: NextAuthOptions = {
     },
   },
 };
+
+console.log('NextAuth configuration completed');
 
 const handler = NextAuth(authOptions);
 

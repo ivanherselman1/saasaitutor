@@ -5,7 +5,7 @@ import { env } from "./env.mjs"
 /**
  * @type {import('next').NextConfig}
  */
-const config = withPlugins([[withBundleAnalyzer({ enabled: env.ANALYZE })]], {
+const config = withPlugins([[withBundleAnalyzer({ enabled: process.env.ANALYZE === 'true' })]], {
   reactStrictMode: true,
   logging: {
     fetches: {
