@@ -2,6 +2,12 @@
 import React, { useState } from 'react';
 import { uploadToS3 } from '../../lib/uploadToS3';
 
+// Add this interface definition
+interface ExtractResponse {
+  text?: string;
+  error?: string;
+}
+
 const FileUpload: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string>('');
@@ -31,19 +37,21 @@ const FileUpload: React.FC = () => {
         body: formData,
       });
       
+      const data = await response.json() as ExtractResponse;
+      
       if (!response.ok) {
-        throw new Error('Failed to extract text from PDF');
+        console.error('Error response from server:', data);
+        throw new Error(data.error || 'Failed to extract text from PDF');
       }
       
-      const data = await response.json();
-      if (typeof data === 'object' && data !== null && 'text' in data && typeof data.text === 'string') {
+      if (data.text) {
         setExtractedText(data.text);
       } else {
-        throw new Error('Invalid response format');
+        throw new Error('No text found in the document');
       }
     } catch (error) {
       console.error('Error uploading file or extracting text:', error);
-      setUploadStatus('File upload or text extraction failed.');
+      setUploadStatus(error instanceof Error ? error.message : 'File upload or text extraction failed.');
     }
   };
 

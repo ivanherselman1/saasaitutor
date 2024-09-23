@@ -1,11 +1,18 @@
 import { NextResponse } from 'next/server';
-import * as pdfjsLib from 'pdfjs-dist';
+import { DocumentProcessorServiceClient } from '@google-cloud/documentai';
 
-// Remove the problematic import
-// import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.entry';
+// You'll need to replace these with your actual values 411eeef7846b9ee
+const projectId = 'aitutorauth';
+const location = 'us'; // e.g., 'us' or 'eu'
+const processorId = '9e776f27a2bb14cb';
 
-// Set up the worker using a CDN URL
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+const client = new DocumentProcessorServiceClient({
+  keyFilename: process.env.GOOGLE_VISION_CREDENTIALS,
+});
+
+const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
+
+const MAX_FILE_SIZE = 1024 * 1024 * 5; // 5 MB limit
 
 export async function POST(request: Request) {
   try {
@@ -13,30 +20,53 @@ export async function POST(request: Request) {
     const file = formData.get('file') as File;
 
     if (!file) {
+      console.error('No file uploaded');
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const text = await extractTextFromPdf(arrayBuffer);
+    if (file.type !== 'application/pdf') {
+      console.error('Uploaded file is not a PDF');
+      return NextResponse.json({ error: 'Uploaded file must be a PDF' }, { status: 400 });
+    }
 
-    return NextResponse.json({ text });
-  } catch (error) {
+    if (file.size > MAX_FILE_SIZE) {
+      console.error('File size exceeds limit');
+      return NextResponse.json({ error: 'File size must not exceed 5 MB' }, { status: 400 });
+    }
+
+    console.log('File received:', file.name, 'Size:', file.size, 'Type:', file.type);
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const base64Content = buffer.toString('base64');
+
+    const [result] = await client.processDocument({
+      name,
+      rawDocument: {
+        content: base64Content,
+        mimeType: 'application/pdf',
+      },
+      // Add any necessary processor-specific configurations here
+    });
+
+    console.log('Document AI processing complete');
+
+    const { document } = result;
+
+    if (!document || !document.text) {
+      console.error('No text found in the document');
+      return NextResponse.json({ error: 'No text found in the document' }, { status: 400 });
+    }
+
+    console.log('Text extracted successfully');
+    return NextResponse.json({ text: document.text });
+  } catch (error: unknown) {
     console.error('Error extracting text from PDF:', error);
-    return NextResponse.json({ error: 'Failed to extract text from PDF' }, { status: 500 });
+    let errorMessage = 'Failed to extract text from PDF';
+    if (error instanceof Error) {
+      errorMessage += `: ${error.message}`;
+      console.error('Error details:', error);
+    }
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
 
-async function extractTextFromPdf(arrayBuffer: ArrayBuffer): Promise<string> {
-  const loadingTask = pdfjsLib.getDocument(arrayBuffer);
-  const pdf = await loadingTask.promise;
-
-  let text = '';
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const strings = content.items.map((item: any) => item.str);
-    text += strings.join(' ') + '\n';
-  }
-
-  return text.trim();
-}

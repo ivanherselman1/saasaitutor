@@ -34,3 +34,6 @@ yarn-error.log*
 /playwright/.cache/
 
 /.npm-only-allow
+
+# Google Cloud Vision API key
+infofiles/googlevisionkeys.json
